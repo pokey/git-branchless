@@ -28,6 +28,7 @@ pub fn amend(
     effects: &Effects,
     git_run_info: &GitRunInfo,
     move_options: &MoveOptions,
+    interactive: bool,
 ) -> eyre::Result<ExitCode> {
     let now = SystemTime::now();
     let timestamp = now.duration_since(SystemTime::UNIX_EPOCH)?.as_secs_f64();
@@ -87,13 +88,20 @@ pub fn amend(
         .collect_vec();
 
     let opts = if !staged_entries.is_empty() {
-        AmendFastOptions::FromIndex {
-            paths: staged_entries
-                .into_iter()
-                .flat_map(|entry| entry.paths())
-                .collect(),
+        if interactive {
+            unimplemented!("Can't currently amend interactively when there are staged changes");
+        } else {
+            AmendFastOptions::FromIndex {
+                paths: staged_entries
+                    .into_iter()
+                    .flat_map(|entry| entry.paths())
+                    .collect(),
+            }
         }
     } else {
+        if interactive {
+            todo!()
+        }
         AmendFastOptions::FromWorkingCopy {
             status_entries: unstaged_entries.clone(),
         }

@@ -119,7 +119,10 @@ fn do_main_and_drop_locals() -> eyre::Result<i32> {
     let effects = Effects::new(color);
 
     let ExitCode(exit_code) = match command {
-        Command::Amend { move_options } => amend::amend(&effects, &git_run_info, &move_options)?,
+        Command::Amend {
+            move_options,
+            interactive,
+        } => amend::amend(&effects, &git_run_info, &move_options, interactive)?,
 
         Command::BugReport => bug_report::bug_report(&effects, &git_run_info)?,
 
