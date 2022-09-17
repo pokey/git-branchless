@@ -147,6 +147,7 @@ impl RootOperation {
                             operation_type: first.clone(),
                             progress_bar: ProgressBar::new_spinner(),
                             has_meter: Default::default(),
+                            icon: Default::default(),
                             start_times: Default::default(),
                             elapsed_duration: Default::default(),
                             children: Default::default(),
@@ -230,12 +231,27 @@ impl RootOperation {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum OperationIcon {
+    None,
+    Success,
+    Warning,
+    Failure,
+}
+
+impl Default for OperationIcon {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
 #[derive(Debug)]
 struct OperationState {
     operation_type: OperationType,
     progress_bar: ProgressBar,
     has_meter: bool,
     start_times: Vec<Instant>,
+    icon: OperationIcon,
     elapsed_duration: Duration,
     children: Vec<OperationState>,
 }
@@ -277,6 +293,7 @@ impl OperationState {
                             operation_type: first.clone(),
                             progress_bar: ProgressBar::new_spinner(),
                             has_meter: Default::default(),
+                            icon: Default::default(),
                             start_times: Default::default(),
                             elapsed_duration: Default::default(),
                             children: Default::default(),
@@ -311,6 +328,8 @@ impl OperationState {
     pub fn tick(&self, nesting_level: usize) {
         lazy_static! {
             static ref CHECKMARK: String = console::style("✓").green().to_string();
+            static ref EXCLAMATION: String = console::style("⚠️").yellow().to_string();
+            static ref CROSS: String = console::style("✖️").red().to_string();
             static ref IN_PROGRESS_SPINNER_STYLE: Arc<Mutex<ProgressStyle>> =
                 Arc::new(Mutex::new(ProgressStyle::default_spinner().template("{prefix}{spinner} {wide_msg}").unwrap()));
             static ref IN_PROGRESS_BAR_STYLE: Arc<Mutex<ProgressStyle>> =
@@ -319,13 +338,27 @@ impl OperationState {
                 // the line so that the length number isn't overlapped by the
                 // cursor.
                 Arc::new(Mutex::new(ProgressStyle::default_bar().template("{prefix}{spinner} {wide_msg} {bar} {pos}/{len} ").unwrap()));
-            static ref FINISHED_PROGRESS_STYLE: Arc<Mutex<ProgressStyle>> = Arc::new(Mutex::new(IN_PROGRESS_SPINNER_STYLE
+            static ref SUCCESS_PROGRESS_STYLE: Arc<Mutex<ProgressStyle>> = Arc::new(Mutex::new(IN_PROGRESS_SPINNER_STYLE
                 .clone()
                 .lock()
                 .unwrap()
                 .clone()
                 // Requires at least two tick values, so just pass the same one twice.
                 .tick_strings(&[&CHECKMARK, &CHECKMARK])));
+            static ref WARNING_PROGRESS_STYLE: Arc<Mutex<ProgressStyle>> = Arc::new(Mutex::new(IN_PROGRESS_SPINNER_STYLE
+                .clone()
+                .lock()
+                .unwrap()
+                .clone()
+                // Requires at least two tick values, so just pass the same one twice.
+                .tick_strings(&[&CROSS, &CROSS])));
+            static ref FAILURE_PROGRESS_STYLE: Arc<Mutex<ProgressStyle>> = Arc::new(Mutex::new(IN_PROGRESS_SPINNER_STYLE
+                .clone()
+                .lock()
+                .unwrap()
+                .clone()
+                // Requires at least two tick values, so just pass the same one twice.
+                .tick_strings(&[&CROSS, &CROSS])));
         }
 
         let elapsed_duration = match self.start_times.iter().min() {
@@ -336,12 +369,18 @@ impl OperationState {
             }
         };
 
-        self.progress_bar
-            .set_style(match (self.start_times.as_slice(), self.has_meter) {
-                ([], _) => FINISHED_PROGRESS_STYLE.lock().unwrap().clone(),
-                ([..], false) => IN_PROGRESS_SPINNER_STYLE.lock().unwrap().clone(),
-                ([..], true) => IN_PROGRESS_BAR_STYLE.lock().unwrap().clone(),
-            });
+        self.progress_bar.set_style(
+            match (self.start_times.as_slice(), self.has_meter, self.icon) {
+                (_, _, OperationIcon::Success) => SUCCESS_PROGRESS_STYLE.lock().unwrap().clone(),
+                (_, _, OperationIcon::Warning) => WARNING_PROGRESS_STYLE.lock().unwrap().clone(),
+                (_, _, OperationIcon::Failure) => FAILURE_PROGRESS_STYLE.lock().unwrap().clone(),
+                ([], _, OperationIcon::None) => SUCCESS_PROGRESS_STYLE.lock().unwrap().clone(),
+                ([..], false, OperationIcon::None) => {
+                    IN_PROGRESS_SPINNER_STYLE.lock().unwrap().clone()
+                }
+                ([..], true, OperationIcon::None) => IN_PROGRESS_BAR_STYLE.lock().unwrap().clone(),
+            },
+        );
         // Both `set_message` and `set_prefix` implicitly call
         // `ProgressBar::tick` and force a redraw.
         self.progress_bar.set_prefix("  ".repeat(nesting_level));
@@ -555,7 +594,7 @@ impl Effects {
         operation_state.inc_progress(increment);
     }
 
-    fn on_set_message(&self, operation_key: &OperationKey, message: String) {
+    fn on_set_message(&self, operation_key: &OperationKey, icon: OperationIcon, message: String) {
         match self.dest {
             OutputDest::Stdout => {}
             OutputDest::Suppress | OutputDest::BufferForTest { .. } => return,
@@ -567,6 +606,7 @@ impl Effects {
             Some(operation_state) => operation_state,
             None => return,
         };
+        operation_state.icon = icon;
         operation_state.progress_bar.set_message(message);
     }
 
@@ -894,9 +934,10 @@ impl ProgressHandle<'_> {
     }
 
     /// Update the message for this progress meter.
-    pub fn notify_status(&self, message: impl Into<String>) {
+    pub fn notify_status(&self, icon: OperationIcon, message: impl Into<String>) {
         let message = message.into();
-        self.effects.on_set_message(&self.operation_key, message);
+        self.effects
+            .on_set_message(&self.operation_key, icon, message);
     }
 }
 
