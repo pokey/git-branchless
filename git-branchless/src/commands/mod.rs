@@ -16,6 +16,7 @@ mod reword;
 mod smartlog;
 mod snapshot;
 mod sync;
+mod test;
 mod undo;
 mod wrap;
 
@@ -49,6 +50,7 @@ use lib::git::NonZeroOid;
 
 use self::reword::InitialCommitMessages;
 use self::smartlog::SmartlogOptions;
+use self::test::TestOptions;
 
 fn rewrite_args(args: Vec<OsString>) -> Vec<OsString> {
     let first_arg = match args.first() {
@@ -315,6 +317,10 @@ fn do_main_and_drop_locals() -> eyre::Result<i32> {
             move_options,
             revsets,
         } => sync::sync(&effects, &git_run_info, update_refs, &move_options, revsets)?,
+
+        Command::Test { command, commits } => {
+            test::test(&effects, &git_run_info, &TestOptions { command }, commits)?
+        }
 
         Command::Undo { interactive, yes } => {
             undo::undo(&effects, &git_run_info, interactive, yes)?

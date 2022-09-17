@@ -73,6 +73,7 @@ const ALL_ALIASES: &[(&str, &str)] = &[
     ("sl", "smartlog"),
     ("smartlog", "smartlog"),
     ("sync", "sync"),
+    ("test", "test"),
     ("undo", "undo"),
     ("unhide", "unhide"),
 ];

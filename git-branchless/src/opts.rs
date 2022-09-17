@@ -481,6 +481,14 @@ pub enum Command {
         revsets: Vec<Revset>,
     },
 
+    Test {
+        #[clap(value_parser, short = 'c', long = "command")]
+        command: String,
+
+        #[clap(value_parser, default_value = "stack()")]
+        commits: Revset,
+    },
+
     /// Browse or return to a previous state of the repository.
     Undo {
         /// Interactively browse through previous states of the repository
